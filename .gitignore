@@ -166,6 +166,10 @@ cython_debug/
 .autoenv
 .autoenv.leave
 
+# Audio
+*.mp3
+*.wav
+
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode
 ### VisualStudioCode ###
 .vscode/*
