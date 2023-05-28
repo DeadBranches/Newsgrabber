@@ -7,6 +7,7 @@ from typing import Dict, List, Union, Tuple, Optional
 from dotenv import load_dotenv
 from elevenlabs import generate, set_api_key, save
 import azure.cognitiveservices.speech as speechsdk
+from pydub import AudioSegment
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -33,25 +34,27 @@ def summarize(text: str, title: Optional[str] = None) -> str:
     # response = openai.ChatCompletion.create(
     #     model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
     # )
-    #return response["choices"][0]["message"]["content"]
-    max_retries = 5 # set the maximum number of retries
-    delay = 10 # set the delay in seconds between retries
+    # return response["choices"][0]["message"]["content"]
+    max_retries = 5  # set the maximum number of retries
+    delay = 10  # set the delay in seconds between retries
 
     for i in range(max_retries):
         try:
             response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
-                )
+                model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
+            )
             return response["choices"][0]["message"]["content"]
-            break # exit the loop if successful
+            break  # exit the loop if successful
         except openai.error.RateLimitError as e:
             print("Rate limit error:", e)
-            if i < max_retries - 1: # check if there are more retries left
+            if i < max_retries - 1:  # check if there are more retries left
                 print(f"Waiting {delay} seconds before retrying...")
-                time.sleep(delay) # wait for some time before retrying
+                time.sleep(delay)  # wait for some time before retrying
             else:
-                print("Maximum number of retries reached. Please try again later or contact OpenAI support.")
-                
+                print(
+                    "Maximum number of retries reached. Please try again later or contact OpenAI support."
+                )
+
 
 def get_hn_posts(post_type: str, num_posts: int) -> List[Dict[str, Union[str, int]]]:
     params = {
@@ -184,27 +187,45 @@ def curate(title_summary_map: Dict[str, str]) -> str:
 
 
 def save_audio(podcast_script: str, speech_engine: str) -> None:
+    filename = "podcast"
+
     if speech_engine == "elevenlabs":
         audio = generate(
             text=podcast_script,
             voice="Bella",
             model="eleven_monolingual_v1",
         )
-    
+
+        # Uses elevenlabs save function
+        save(audio, f"{filename}.mp3")
+
     # TODO: Change to better sounding voice + SSML
     elif speech_engine == "azure":
+        # Configuration variables
         speech_synthesis_voice_name = "en-US-AriaNeural"
 
+        # API setup
+        audio_config = speechsdk.audio.AudioConfig(filename=f"{filename}.wav")
         speech_config = speechsdk.SpeechConfig(
             subscription=azure_key, region=azure_service_region
         )
         speech_config.speech_synthesis_voice_name = speech_synthesis_voice_name
-        speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config)
 
-        audio = speech_synthesizer.speak_text_async(podcast_script).get()
+        # Speech generation
+        speech_synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=speech_config, audio_config=audio_config
+        )
+        result = speech_synthesizer.speak_text_async(podcast_script).get()
 
-    # TODO: fix type error since utils expects a byte-object
-    save(audio, "podcast.mp3")
+        # Error handling
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+            print("Speech synthesis succeeded.")
+        else:
+            print("Speech synthesis failed: {}".format(result.error_details))
+
+        # Audio file creation
+        audio_segment = AudioSegment.from_wav(f"{filename}.wav")
+        audio_segment.export(f"{filename}.mp3", format="mp3")
 
 
 def main():
