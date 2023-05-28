@@ -7,7 +7,9 @@ from typing import Dict, List, Union, Tuple, Optional
 from dotenv import load_dotenv
 from elevenlabs import generate, set_api_key, save
 import azure.cognitiveservices.speech as speechsdk
+import io
 from pydub import AudioSegment
+from azure.cognitiveservices.speech import SpeechSynthesisOutputFormat
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -182,6 +184,90 @@ def curate(title_summary_map: Dict[str, str]) -> str:
     return podcast_script
 
 
+class AzureSpeechSynthesizer:
+    """
+    Generate speech using Azure Cognitive Services
+
+    parameters:
+        key: Azure Speech API key
+        region: Azure Speech API region
+        voice_profile: Profile name, as set in the voice_configuration dictionary
+    """
+
+    def __init__(self, key: str, region: str, voice_profile: str):
+        self.key = key
+        self.region = region
+        self.voice_profile = voice_profile
+
+        # A dictionary of voice profiles and their options
+        self.voice_configuration = {
+            "ashley": {
+                "voice_name": "en-US-AshleyNeural",
+                "voice_pitch": "-5%",
+                "voice_rate": "0",
+                "voice_volume": "100",
+                "voice_style": None,
+            },
+            "grace": {
+                "voice_name": "en-US-GraceNeural",
+                "voice_pitch": "+14%",
+                "voice_rate": "0",
+                "voice_volume": "100",
+                "voice_style": None,
+            },
+        }
+
+        self.speech_config = speechsdk.SpeechConfig(
+            subscription=self.key, region=self.region
+        )
+        # TODO: Use a generator to set the speech config properties
+        self.speech_config.speech_synthesis_voice_name = self.voice_configuration[
+            self.voice_profile
+        ]["voice_name"]
+        self.speech_config.speech_synthesis_pitch = self.voice_configuration[
+            self.voice_profile
+        ]["voice_pitch"]
+        self.speech_config.speech_synthesis_rate = self.voice_configuration[
+            self.voice_profile
+        ]["voice_rate"]
+        self.speech_config.speech_synthesis_volume = self.voice_configuration[
+            self.voice_profile
+        ]["voice_volume"]
+        if self.voice_configuration[self.voice_profile]["voice_style"]:
+            # Use a speech synthesis style if specified in the voice profile
+            self.speech_config.set_speech_synthesis_style(
+                self.voice_configuration[self.voice_profile]["voice_style"]
+            )
+
+        self.speech_config.set_speech_synthesis_output_format(
+            SpeechSynthesisOutputFormat.Audio24Khz160KBitRateMonoMp3
+        )
+        # See https://learn.microsoft.com/en-us/python/api/azure-cognitiveservices-speech/azure.cognitiveservices.speech.speechsynthesisoutputformat?view=azure-python
+        # for available options
+
+    def synthesize(self, text: str) -> bytes:
+        # Speech generation
+        speech_synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=self.speech_config, audio_config=None
+        )
+        result = speech_synthesizer.speak_text_async(text).get()
+
+        # Error handling
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+            print("Speech synthesis succeeded.")
+            return result.audio_data
+        else:
+            print("Speech synthesis failed: {}".format(result.error_details))
+            return None
+
+    def list_voice_profiles(self) -> None:
+        print("The available voice profiles are:")
+        for profile in self.voice_configuration:
+            print(f"- {profile}")
+            for option in self.voice_configuration[profile]:
+                print(f"  - {option}: {self.voice_configuration[profile][option]}")
+
+
 def save_audio(podcast_script: str, speech_engine: str) -> None:
     filename = "podcast"
 
@@ -192,36 +278,16 @@ def save_audio(podcast_script: str, speech_engine: str) -> None:
             model="eleven_monolingual_v1",
         )
 
-        # Elevenlabs save function
         save(audio, f"{filename}.mp3")
 
-    # TODO: Change to better sounding voice + SSML
     elif speech_engine == "azure":
-        # Configuration variables
-        speech_synthesis_voice_name = "en-US-AriaNeural"
-
-        # API setup
-        audio_config = speechsdk.audio.AudioConfig(filename=f"{filename}.wav")
-        speech_config = speechsdk.SpeechConfig(
-            subscription=azure_key, region=azure_service_region
+        # voice_profile options: ashley, grace
+        azure_speech_synthesizer = AzureSpeechSynthesizer(
+            key=azure_key, region=azure_service_region, voice_profile="ashley"
         )
-        speech_config.speech_synthesis_voice_name = speech_synthesis_voice_name
 
-        # Speech generation
-        speech_synthesizer = speechsdk.SpeechSynthesizer(
-            speech_config=speech_config, audio_config=audio_config
-        )
-        result = speech_synthesizer.speak_text_async(podcast_script).get()
-
-        # Error handling
-        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            print("Speech synthesis succeeded.")
-        else:
-            print("Speech synthesis failed: {}".format(result.error_details))
-
-        # Audio file creation
-        audio_segment = AudioSegment.from_wav(f"{filename}.wav")
-        audio_segment.export(f"{filename}.mp3", format="mp3")
+        audio = azure_speech_synthesizer.synthesize(podcast_script)
+        save(audio, f"{filename}.mp3")
 
 
 def main():
@@ -239,3 +305,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # print("one second...")
+    # podcast_script = """
+    # Here's your daily summary.
+
+    # Lit 3.0 pre-releases are out! The Lit team has made a few breaking changes to trim technical debt and improve development velocity and testing stability in the core Lit project. Some changes include dropping support for IE11, removing deprecated APIs, and publishing npm modules as ES2021.
+    # """
+    # speech_engine = "azure"  # "azure" or "elevenlabs"
+    # save_audio(podcast_script, speech_engine)
