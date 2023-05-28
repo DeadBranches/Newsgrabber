@@ -175,10 +175,10 @@ def map_title_summary(posts: List[Dict[str, Union[str, int]]]) -> Dict[str, str]
 
 
 def curate(title_summary_map: Dict[str, str]) -> str:
-    podcast_script = "Here's your daily summary."
+    podcast_script = "Here's your daily summary.\n\n"
 
     for i, title in enumerate(title_summary_map):
-        summary = title_summary_map[title]
+        summary = f"{title_summary_map[title]}\n\n"
         podcast_script += summary
 
     return podcast_script
@@ -291,7 +291,7 @@ def save_audio(podcast_script: str, speech_engine: str) -> None:
 
 
 def main():
-    posts = get_hn_posts("story", 5)
+    posts = get_hn_posts("story", 2)
     # posts += get_hn_posts('ask_hn', 5)
     title_summary_map = map_title_summary(posts)
     print("MAKING SCRIPT...")
