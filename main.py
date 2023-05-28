@@ -31,12 +31,8 @@ def summarize(text: str, title: Optional[str] = None) -> str:
         f"\n\nText: {text}\n\nSummary:"
     )
 
-    # response = openai.ChatCompletion.create(
-    #     model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
-    # )
-    # return response["choices"][0]["message"]["content"]
-    max_retries = 5  # set the maximum number of retries
-    delay = 10  # set the delay in seconds between retries
+    max_retries = 5  # OpenAI API maximum number of retries
+    delay = 10  # OpenAI API between retries in seconds
 
     for i in range(max_retries):
         try:
@@ -47,9 +43,9 @@ def summarize(text: str, title: Optional[str] = None) -> str:
             break  # exit the loop if successful
         except openai.error.RateLimitError as e:
             print("Rate limit error:", e)
-            if i < max_retries - 1:  # check if there are more retries left
+            if i < max_retries - 1:  #
                 print(f"Waiting {delay} seconds before retrying...")
-                time.sleep(delay)  # wait for some time before retrying
+                time.sleep(delay)
             else:
                 print(
                     "Maximum number of retries reached. Please try again later or contact OpenAI support."
@@ -196,7 +192,7 @@ def save_audio(podcast_script: str, speech_engine: str) -> None:
             model="eleven_monolingual_v1",
         )
 
-        # Uses elevenlabs save function
+        # Elevenlabs save function
         save(audio, f"{filename}.mp3")
 
     # TODO: Change to better sounding voice + SSML
